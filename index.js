@@ -1,18 +1,11 @@
-// let csv_data;
-// let treeData, margin, tree, table, svg, g;
-
-// FILENAME is static, but add a random variable to the end to prevent browser caching,
-// aka - "I changed the content of the file, but why isn't that stuff drawing?!"
 const FILENAME = "data2.csv" + "?nocache=" + Date.now(); 
 
 // set the dimensions and margins of the diagram
 const margin = { top: 40, right: 45, bottom: 30, left: 150 };
 
 // Use the parsed tree data to dynamically create height & width
-const width = 2500 - margin.left - margin.right,
-height = 2540 - margin.top - margin.bottom;
-
-
+const width = 1500 - margin.left - margin.right,
+height = 3600 - margin.top - margin.bottom;
 
 
 // FUNCTIONS
@@ -42,12 +35,12 @@ const g = svg.append("g")
 
 // UPDATE
 
-const nodeEnterSettings = node => {
+const nodeEnterSettings = (node, x, y) => {
     const nodeEnter = node
         .enter()
         .append("g")
         .attr("class", "node")
-        .attr("transform", d => `translate(${source.y},${source.x})`)
+        .attr("transform", () => `translate(${y},${x})`)
         .on("click", function(d) {
         toggle(d);
         update(d);
@@ -77,12 +70,12 @@ const nodeEnterSettings = node => {
     return nodeEnter;
 }
 
-const nodeExitSettings = (node, DURATION) => {
+const nodeExitSettings = (node, DURATION, x, y) => {
     const nodeExit = node
         .exit()
         .transition()
         .duration(DURATION)
-        .attr("transform", d => `translate(${source.y},${source.x})`)
+        .attr("transform", d => `translate(${y},${x})`)
         .remove();
 
     nodeExit.select("circle")
@@ -110,17 +103,101 @@ const nodeUpdateSettings = (nodeUpdate, DURATION) => {
     return nodeUpdate;
 }
 
-async function main() {
-    const csv_data = await d3.text(FILENAME);
-    console.log ("CSV loaded");
-    
-    table = d3.csvParseRows(csv_data, parse_row);
-    treeData = stratify(table)
-    treeData.each(d =>{ d.name = d.data.resource_name })
-    treeData.children.forEach(collapse);
-    update(treeData);
+function collapse(node) {
+    if (node.children) {
+        node._children = node.children
+        node._children.forEach(collapse)
+        node.children = null
+    }
 }
 
+// Toggle children on click.
+function toggle(node) {
+    if (node.children) {
+        node._children = node.children;
+        node.children = null;
+    } else {
+        node.children = node._children;
+        node._children = null;
+    }
+    update(node);
+}
+
+
+function getImageURL(resource_type) {
+    // const URL_BASE = "https://storage.googleapis.com/mps-storage/mzinni/external/gcp-arch-viz-images/";
+    const URL_BASE = "icons/"
+    let imageFilename = "extras/google_cloud_platform.png";
+
+    switch (resource_type) {
+      case "organization":
+        imageFilename = "cloud_logo.png";
+        break;
+
+      case "folder":
+        imageFilename = "folder_logo.png";
+        break;
+
+      case "project":
+        imageFilename = "project_logo.png";
+        break;
+
+      case "appengine_app":
+        imageFilename = "compute/app_engine.png";
+        break;
+
+      case "kubernetes_cluster":
+        imageFilename = "compute/container_engine.png";
+        break;
+
+      case "cloudsqlinstance":
+        imageFilename = "storage___databases/cloud_sql.png";
+        break;
+
+      case "bucket":
+        imageFilename = "storage___databases/cloud_storage.png";
+        break;
+
+      case "disk":
+        imageFilename = "storage___databases/persistent_disk.png"
+        break;
+
+      default:
+        imageFilename = "extras/generic_gcp.png";
+        break;
+    }
+    return URL_BASE + imageFilename;
+}
+
+const linkSettings = (treeData, DURATION, x, y) => {
+    const link = g.selectAll(".link")
+    .data(treeData.links(), d => d.target.id);
+
+    const linkEnter = link.enter().insert('path', "g")
+        .attr("class", "link")
+        .attr("d", d3.linkHorizontal()
+        .x(d => y)
+        .y(d => x));
+
+    const linkUpdate = linkEnter.merge(link);
+    linkUpdate
+        .transition()
+        .duration(DURATION)
+        .attr("d", d3.linkHorizontal()
+        .x(d => d.y)
+        .y(d => d.x));
+
+    link
+        .exit()
+        .transition()
+        .duration(DURATION)
+        .attr("d", d3.linkHorizontal()
+        .x(() => y)
+        .y(() => x)
+        )
+        .remove();
+}
+let treeData;
 
 function update(source) {
     tree(treeData);
@@ -130,41 +207,29 @@ function update(source) {
     const node = g.selectAll('.node')
         .data(treeData.descendants(), d => (d.id || (d.id = ++i)));
  
-    const nodeEnter = nodeEnterSettings(node)
     const ANIMATION_DURATION_MS = 500;
+    const nodeEnter = nodeEnterSettings(node, source.x, source.y);
   
     nodeUpdateSettings(nodeEnter.merge(node), ANIMATION_DURATION_MS);
-    nodeExitSettings(node, ANIMATION_DURATION_MS)
+    nodeExitSettings(node, ANIMATION_DURATION_MS, source.x, source.y)
 
-    const link = g.selectAll(".link")
-        .data(treeData.links(), d => d.target.id);
-
-    const linkEnter = link.enter().insert('path', "g")
-        .attr("class", "link")
-        .attr("d", d3.linkHorizontal()
-        .x(d => source.y)
-        .y(d => source.x));
-
-    const linkUpdate = linkEnter.merge(link);
-    linkUpdate
-        .transition()
-        .duration(ANIMATION_DURATION_MS)
-        .attr("d", d3.linkHorizontal()
-        .x(d => d.y)
-        .y(d => d.x));
-
-    link
-        .exit()
-        .transition()
-        .duration(ANIMATION_DURATION_MS)
-        .attr("d", d3.linkHorizontal()
-        .x(d => source.y)
-        .y(d => source.x)
-        )
-        .remove();
+    linkSettings(treeData, ANIMATION_DURATION_MS, source.x, source.y)
 
     node.each(function(d) {
         d.x0 = d.x;
         d.y0 = d.y;
     });
 }
+
+async function main() {
+    const csv_data = await d3.text(FILENAME);
+    console.log ("CSV loaded");
+    
+    const table = d3.csvParseRows(csv_data, parse_row);
+    treeData = stratify(table)
+    treeData.each(d =>{ d.name = d.data.resource_name })
+    treeData.children.forEach(collapse);
+    update(treeData);
+}
+
+main();
