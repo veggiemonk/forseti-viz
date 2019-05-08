@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<!--
+/*
+ * Copyright (C) 2018 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
+-->
+<meta charset="utf-8">
+<style>
+  /* set the CSS */
+
+  .node circle {
+    fill: #fff;
+    stroke: steelblue;
+    stroke-width: 3px;
+  }
+
+  .node text {
+    font: 12px sans-serif;
+  }
+
+  .node--internal text {
+    text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff;
+  }
+
+  .link {
+    fill: none;
+    stroke: #ccc;
+    stroke-width: 2px;
+  }
+</style>
+
+<body>
+  <script src="//d3js.org/d3.v5.min.js"></script>
+  <script>
+    function autosize(svg) {
+        // document.body.appendChild(svg);
+        const box = svg.getBBox();
+        // document.body.removeChild(svg);
+        svg.setAttribute("viewBox", `${box.x} ${box.y} ${box.width} ${box.height}`);
+        return svg;
+    }
+
+    // FILENAME is static, but add a random variable to the end to prevent browser caching,
+    // aka - "I changed the content of the file, but why isn't that stuff drawing?!"
+    const FILENAME = "data.csv" + "?nocache=" + Date.now(); 
+    const FILE_LOAD_START_TIME = new Date().toLocaleTimeString();
+    console.log ("Loading file: " + FILENAME + ", start time: " + FILE_LOAD_START_TIME);    
+
+    d3.text(FILENAME).then(function(text) {
+      const FILE_LOAD_END_TIME = new Date().toLocaleTimeString();
+      console.log ("CSV loaded: " + FILE_LOAD_END_TIME);
+
+
+    const table = d3.csvParseRows(text, function (d, i) {
+        return {
+          // NOTE: This stuff is VERY tightly coupled to the format of the inventory data export. 
+          //       Because there are no headers in the CSV export file, the column order is
+          //       extremely important and needs to be carefully paid attention to.        
+          id: d[0],
+          resource_type: d[1],
+          category: d[2],
+          resource_id: d[3],
+          parent_id: (d[1] == 'organization' ? "" : d[4]),
+          resource_name: (d[5] != '' ? d[5] : d[6]),
+        //   image: getImageURL(d[1])
+        };
+      });
+
+    // console.log(table);
+
+    const stratify = d3.stratify()
+        .id(function (d) { return d.id; })
+        .parentId(function (d) { return d.parent_id; });
+    
+    const setName = data => stratify(data).each( d => {
+      console.log({name: d.data.resource_name})
+      d.name = d.data.resource_name
+    })
+
+
+    const width = 932
+    const radius = width / 2
+
+    const tree = data => d3.tree()
+        .size([2 * Math.PI, radius])
+        .separation((a, b) => (a.parent == b.parent ? 1 : 2) / a.depth)
+        (setName(data))
+
+    const root = tree(table);
+
+    console.log({root});
+    
+    const svg = d3.select("body").append("svg")
+        // .attr("width", width )
+        // .attr("height", width )
+      .style("width", "100%")
+      .style("height", "auto")
+      .style("padding", "10px")
+      .style("box-sizing", "border-box")
+      .style("font", "10px sans-serif");
+
+  const link = svg.append("g")
+      .attr("fill", "none")
+      .attr("stroke", "#555")
+      .attr("stroke-opacity", 0.4)
+      .attr("stroke-width", 1.5)
+    .selectAll("path")
+    .data(root.links())
+    .join("path")
+      .attr("d", d3.linkRadial()
+          .angle(d => d.x)
+          .radius(d => d.y));
+  
+  const node = svg.append("g")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-width", 3)
+    .selectAll("g")
+    .data(root.descendants().reverse())
+    .join("g")
+      .attr("transform", d => `
+        rotate(${d.x * 180 / Math.PI - 90})
+        translate(${d.y},0)
+      `);
+  
+  node.append("circle")
+      .attr("fill", d => d.children ? "#555" : "#999")
+      .attr("r", 2.5);
+  
+  node.append("text")
+      .attr("dy", "0.31em")
+      .attr("x", d => d.x < Math.PI === !d.children ? 6 : -6)
+      .attr("text-anchor", d => d.x < Math.PI === !d.children ? "start" : "end")
+      .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+      .text(d => d.data.name)
+    .clone(true).lower()
+      .attr("stroke", "white");
+
+  autosize(svg.node());
+});
+
+  </script>
+</body>
