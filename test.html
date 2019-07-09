@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@observablehq/stdlib"></script>
+  <style>
+    body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }
+  </style>
+</head>
+
+<body>
+    <svg id="packSVG" width=932 height=932 viewBox="0,0,932,932"></svg>
+
+  <script>
+// const FILENAME = "data2.csv" + "?nocache=" + Date.now();
+const FILENAME = "http://localhost:3000/" //+ "?nocache=" + Date.now();
+
+// set the dimensions and margins of the diagram
+const margin = { top: 40, right: 45, bottom: 30, left: 150 };
+
+// Use the parsed tree data to dynamically create height & width
+const width = 1500 - margin.left - margin.right,
+  height = 3600 - margin.top - margin.bottom;
+
+const color = d3.scaleSequential(d3.interpolateMagma).domain([8, 0]);
+const format = d3.format(",d");
+// const width = 932;
+// const height = width;
+
+const {DOM, require} = new observablehq.Library;
+
+const pack = data => d3.pack()
+    .size([width - 2, height - 2])
+    .padding(3)
+  (d3.hierarchy(data)
+    .sum(d => d.value)
+    .sort((a, b) => b.value - a.value))
+
+// const tree = d3.tree().size([height, width]);
+const stratify = d3
+  .stratify()
+  .id(d => d.id)
+  .parentId(d => d.parent_id);
+const parse_row = d => ({
+  // NOTE: This stuff is VERY tightly coupled to the format of the inventory data export.
+  //       Because there are no headers in the CSV export file, the column order is
+  //       extremely important and needs to be carefully paid attention to.
+  id: d[0],
+  resource_type: d[1],
+  category: d[2],
+  resource_id: d[3],
+  parent_id: d[1] == "organization" ? "" : d[4],
+  resource_name: d[5] != "" ? d[5] : d[6],
+  image: getImageURL(d[1])
+});
+
+
+function update(source) {
+    // console.log({source})
+  const root = pack(source);
+
+  const svg = d3.select('#packSVG')
+      .style("font", "10px sans-serif")
+      .style("width", "100%")
+      .style("height", "auto")
+      .attr("text-anchor", "middle");
+   
+const g = svg
+  .append("g")
+  .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const node = g
+    .selectAll(".node")
+    .data(source.descendants(), d => d.id || (d.id = ++i));
+
+      node.append("circle")
+        .attr("r", d => d.r)
+        .attr("fill", d => color(d.height));
+
+      const leaf = node.filter(d => !d.children);
+
+      leaf.select("circle")
+        .attr("id", d => (d.leafUid = DOM.uid("leaf")).id)
+        .attr("stroke", "#000");
+
+      leaf.append("clipPath")
+        .attr("id", d => (d.clipUid = DOM.uid("clip")).id)
+        .append("use")
+        .attr("xlink:href", d => d.leafUid.href);
+
+      leaf.append("text")
+        .attr("clip-path", d => d.clipUid)
+        .selectAll("tspan")
+        .data(d => d.data.name.split(/(?=[A-Z][^A-Z])/g))
+        .enter().append("tspan")
+        .attr("x", 0)
+        .attr("y", (d, i, nodes) => `${i - nodes.length / 2 + 0.8}em`)
+        .text(d => d);
+
+      node.append("title")
+        .text(d => `${d.ancestors().map(d => d.data.name).reverse().join("/")}\n${format(d.value)}`)  
+}
+
+function getImageURL(resource_type) {
+  // const URL_BASE = "https://storage.googleapis.com/mps-storage/mzinni/external/gcp-arch-viz-images/";
+  const URL_BASE = "icons/";
+  let imageFilename = "extras/google_cloud_platform.png";
+
+  switch (resource_type) {
+    case "organization":
+      imageFilename = "cloud_logo.png";
+      break;
+
+    case "folder":
+      imageFilename = "folder_logo.png";
+      break;
+
+    case "project":
+      imageFilename = "project_logo.png";
+      break;
+
+    case "appengine_app":
+      imageFilename = "compute/app_engine.png";
+      break;
+
+    case "kubernetes_cluster":
+      imageFilename = "compute/container_engine.png";
+      break;
+
+    case "cloudsqlinstance":
+      imageFilename = "storage___databases/cloud_sql.png";
+      break;
+
+    case "bucket":
+      imageFilename = "storage___databases/cloud_storage.png";
+      break;
+
+    case "disk":
+      imageFilename = "storage___databases/persistent_disk.png";
+      break;
+
+    default:
+      imageFilename = "extras/generic_gcp.png";
+      break;
+  }
+  return URL_BASE + imageFilename;
+}
+
+async function main() {
+  const csv_data = await d3.text(FILENAME);
+  console.log("CSV loaded");
+
+  const table = d3.csvParseRows(csv_data, parse_row);
+  let treeData = stratify(table);
+  treeData.each(d => {
+    d.name = d.data.resource_name;
+  });
+//   treeData.children.forEach(collapse);
+  update(treeData);
+}
+
+main();
+
+  </script>
+</body>
