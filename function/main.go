@@ -85,7 +85,7 @@ const csv_data = {{.}}
 const margin = { top: 40, right: 45, bottom: 30, left: 150 };
 
 // Use the parsed tree data to dynamically create height & width
-const width = 1500 - margin.left - margin.right,
+const width = 2500 - margin.left - margin.right,
   height = 3600 - margin.top - margin.bottom;
 
 // FUNCTIONS
@@ -332,16 +332,15 @@ console.log({csv_data});
   treeData.each(d => {
     d.name = d.data.resource_name;
   });
-  treeData.children.forEach(collapse);
-  update(treeData);
+  digraph(treeData)
+  //treeData.children.forEach(collapse);
+  //update(treeData);
 }
 
 main();
 
   </script>
 </body>`
-
-
 )
 
 
@@ -359,6 +358,51 @@ func init() {
 
 // ExtractCSV extracts the data from Forseti database.
 func ExtractCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("db.Query: %v", err)
+		http.Error(w, "Error querying database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	payload := make([]byte, 0)
+	for rows.Next() {
+		data := new(Node)
+
+		err := rows.Scan(
+			&data.ID,
+			&data.ResourceType,
+			&data.Category,
+			&data.ResourceID,
+			&data.ParentID,
+			&data.ResourceDisplayName,
+			&data.ResourceName,
+		)
+		if err != nil {
+			log.Printf("rows.Scan: %v", err)
+			http.Error(w, "Error scanning database", http.StatusInternalServerError)
+			return
+		}
+
+		payload = append(payload, []byte(fmt.Sprintf("%d,%s,%s,%s,%d,%s,%s\n",
+			data.ID,
+			data.ResourceType,
+			data.Category,
+			data.ResourceID,
+			data.ParentID,
+			data.ResourceDisplayName,
+			data.ResourceName,
+		))...)
+	}
+
+	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(payload)
+}
+
+
+// RenderForseti extracts the data from Forseti database.
+func RenderForseti(w http.ResponseWriter, r *http.Request) {
 
 	t, err := template.New("forseti-viz").Parse(tpl)
 
@@ -403,16 +447,10 @@ func ExtractCSV(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	//w.Header().Add("Content-Type", "text/plain")
-
 	err = t.Execute(w, payload.String())
 	if err != nil {
 		log.Printf("ExecuteTemplate: %v", err)
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
 		return
 	}
-
-	//_, _ = w.Write(payload)
-	//fmt.Fprintf(w, "%s", payload)
-
 }

@@ -23,6 +23,7 @@ func main() {
 	fs := http.FileServer(http.Dir(exPath))
 	http.Handle("/icons/", http.StripPrefix("/", fs))
 
+	http.HandleFunc("/", function.RenderForseti)
 	http.HandleFunc("/data", function.ExtractCSV)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
