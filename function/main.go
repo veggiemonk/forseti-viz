@@ -1,21 +1,56 @@
+package function
+
+import (
+	"database/sql"
+	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+// Node is a node for the csv structure
+type Node struct {
+	ID                  int    `json:"id"`
+	ResourceType        string `json:"resource_type"`
+	Category            string `json:"category"`
+	ResourceID          string `json:"resource_id"`
+	ParentID            int    `json:"parent_id"`
+	ResourceDisplayName string `json:"resource_data_displayname"`
+	ResourceName        string `json:"resource_data_name"`
+}
+
+var (
+	db *sql.DB
+
+	connectionName = os.Getenv("MYSQL_INSTANCE_CONNECTION_NAME")
+	dbUser         = os.Getenv("MYSQL_USER")
+	dbPassword     = os.Getenv("MYSQL_PASSWORD")
+	//dsn            = fmt.Sprintf("%s:%s@unix(/cloudsql/%s)/", dbUser, dbPassword, connectionName)
+	dsn            = fmt.Sprintf("%s:%s@tcp(%s)/forseti_security", dbUser, dbPassword, connectionName)
+
+	query = `
+SELECT  id,
+		resource_type,
+		category,
+		resource_id,
+		IFNULL(parent_id, 0) as parent_id,
+		IFNULL(resource_data ->> '$.displayName', '') as resource_data_displayname,
+		IFNULL(resource_data ->> '$.name', '')        as resource_data_name
+FROM gcp_inventory
+WHERE inventory_index_id = (SELECT id FROM inventory_index ORDER BY completed_at_datetime DESC LIMIT 1)
+  AND (category = 'resource')
+  AND (resource_type = 'organization' OR resource_type = 'project' OR resource_type = 'folder' OR
+       resource_type = 'appengine_app' OR resource_type = 'kubernetes_cluster' OR resource_type = 'cloudsqlinstance' OR
+       resource_type = 'instance' OR resource_type = 'instance_group' OR resource_type = 'instancetemplate' OR
+       resource_type = 'disk' OR resource_type = 'bucket'
+  	   )`
+
+	tpl = `
 <!DOCTYPE html>
-<!--
-/*
- * Copyright (C) 2018 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- */
--->
 <meta charset="utf-8">
 <style>
   /* set the CSS */
@@ -44,7 +79,7 @@
 <body>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.7/d3.min.js" integrity="sha256-D+2/goqcjnuoryb9A0rifuH0rBYS9hKOzNqG91JhAVc=" crossorigin="anonymous"></script>
   <script>
-const FILENAME = "data2.csv" + "?nocache=" + Date.now();
+const csv_data = {{.}}
 
 // set the dimensions and margins of the diagram
 const margin = { top: 40, right: 45, bottom: 30, left: 150 };
@@ -142,7 +177,7 @@ const nodeUpdateSettings = (nodeUpdate, DURATION) => {
   nodeUpdate
     .transition()
     .duration(DURATION)
-    .attr("transform", d => `translate(${d.y},${d.x})`);
+    .attr("transform", d => "translate(" + d.y + "," + d.x + ")" );
 
   nodeUpdate
     .select("circle")
@@ -289,10 +324,9 @@ function update(source) {
   });
 }
 
-async function main() {
-  const csv_data = await d3.text(FILENAME);
-  console.log("CSV loaded");
+function main() {
 
+console.log({csv_data});
   const table = d3.csvParseRows(csv_data, parse_row);
   treeData = stratify(table);
   treeData.each(d => {
@@ -305,4 +339,80 @@ async function main() {
 main();
 
   </script>
-</body>
+</body>`
+
+
+)
+
+
+func init() {
+	var err error
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatalf("Could not open db: %v", err)
+	}
+
+	// Only allow 1 connection to the database to avoid overloading it.
+	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(1)
+}
+
+// ExtractCSV extracts the data from Forseti database.
+func ExtractCSV(w http.ResponseWriter, r *http.Request) {
+
+	t, err := template.New("forseti-viz").Parse(tpl)
+
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("db.Query: %v", err)
+		http.Error(w, "Error querying database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	//payload := make([]byte, 0)
+	var payload strings.Builder
+	for rows.Next() {
+		data := new(Node)
+
+		err := rows.Scan(
+			&data.ID,
+			&data.ResourceType,
+			&data.Category,
+			&data.ResourceID,
+			&data.ParentID,
+			&data.ResourceDisplayName,
+			&data.ResourceName,
+		)
+		if err != nil {
+			log.Printf("rows.Scan: %v", err)
+			http.Error(w, "Error scanning database", http.StatusInternalServerError)
+			return
+		}
+
+		payload.WriteString(fmt.Sprintf("%d,%s,%s,%s,%d,%s,%s\n",
+			data.ID,
+			data.ResourceType,
+			data.Category,
+			data.ResourceID,
+			data.ParentID,
+			data.ResourceDisplayName,
+			data.ResourceName,
+		))
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	//w.Header().Add("Content-Type", "text/plain")
+
+	err = t.Execute(w, payload.String())
+	if err != nil {
+		log.Printf("ExecuteTemplate: %v", err)
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		return
+	}
+
+	//_, _ = w.Write(payload)
+	//fmt.Fprintf(w, "%s", payload)
+
+}
