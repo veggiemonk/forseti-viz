@@ -30,7 +30,7 @@ var (
 	dbUser         = os.Getenv("MYSQL_USER")
 	dbPassword     = os.Getenv("MYSQL_PASSWORD")
 	//dsn            = fmt.Sprintf("%s:%s@unix(/cloudsql/%s)/", dbUser, dbPassword, connectionName)
-	dsn            = fmt.Sprintf("%s:%s@tcp(%s)/forseti_security", dbUser, dbPassword, connectionName)
+	dsn = fmt.Sprintf("%s:%s@tcp(%s)/forseti_security", dbUser, dbPassword, connectionName)
 
 	query = `
 SELECT  id,
@@ -326,15 +326,15 @@ function update(source) {
 
 function main() {
 
-console.log({csv_data});
+//console.log({csv_data});
   const table = d3.csvParseRows(csv_data, parse_row);
   treeData = stratify(table);
   treeData.each(d => {
     d.name = d.data.resource_name;
   });
-  digraph(treeData)
-  //treeData.children.forEach(collapse);
-  //update(treeData);
+  //digraph(treeData)
+  treeData.children.forEach(collapse);
+  update(treeData);
 }
 
 main();
@@ -342,7 +342,6 @@ main();
   </script>
 </body>`
 )
-
 
 func init() {
 	var err error
@@ -400,11 +399,15 @@ func ExtractCSV(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
-
 // RenderForseti extracts the data from Forseti database.
 func RenderForseti(w http.ResponseWriter, r *http.Request) {
-
+	var err error
 	t, err := template.New("forseti-viz").Parse(tpl)
+	if err != nil {
+		log.Printf("Template: %v", err)
+		http.Error(w, "Error templating", http.StatusInternalServerError)
+		return
+	}
 
 	rows, err := db.Query(query)
 	if err != nil {
