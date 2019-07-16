@@ -6,21 +6,36 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.7/d3.min.js" integrity="sha256-D+2/goqcjnuoryb9A0rifuH0rBYS9hKOzNqG91JhAVc=" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@observablehq/stdlib"></script>
     <style>
-        body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }
+        /*body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }*/
+        .node circle {
+            fill: #fff;
+            stroke: steelblue;
+            stroke-width: 3px;
+        }
+        .node text {
+            font: 12px sans-serif;
+        }
+        .node--internal text {
+            text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff;
+        }
+        .link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 2px;
+        }
     </style>
 </head>
 <body>
 <div style="margin: 30px">
     <select id="sel">
-        <option selected="">chart</option>
-        <option>graph</option>
-        <option>circlepack</option>
-        <option>circlepack_color</option>
-        <option>sunburst</option>
-        <option>zoomable_sunburst</option>
+        <option >chart</option>
+        <option selected>graph</option>
+        <option >circlepack_color</option>
+        <option >zoomable_sunburst</option>
+        <option >collapsable_tree</option>
+        <option >hierarchy_tree</option>
     </select>
 </div>
-
 <script src="index.js"></script>
 </body>
 </html>
