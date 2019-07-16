@@ -6,7 +6,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.7/d3.min.js" integrity="sha256-D+2/goqcjnuoryb9A0rifuH0rBYS9hKOzNqG91JhAVc=" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@observablehq/stdlib"></script>
     <style>
-        /*body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }*/
         .node circle {
             fill: #fff;
             stroke: steelblue;
@@ -29,12 +28,19 @@
 <div style="margin: 30px">
     <select id="sel">
         <option >chart</option>
-        <option selected>graph</option>
-        <option >circlepack_color</option>
+        <option >graph</option>
+        <option selected>circlepack_color</option>
         <option >zoomable_sunburst</option>
         <option >collapsable_tree</option>
         <option >hierarchy_tree</option>
     </select>
+    <input type="range" id="height" name="height" value="1600"
+           min="400" max="8000">
+    <label for="height">height</label>
+
+    <input type="range" id="width" name="width" value="1600"
+           min="400" max="4000">
+    <label for="width">width</label>
 </div>
 <script src="index.js"></script>
 </body>
