@@ -1,5 +1,7 @@
+#!/usr/bin/env bash
 
-MYSQL_USER="cloudrun"
+MYSQL_PASSWORD=${MYSQL_PASSWORD:?"is not set. aborting."}
+MYSQL_USER="cloudfunction"
 MYSQL_INSTANCE_CONNECTION_NAME="forseti-238006:us-central1:forseti-server-db-b4bd587"
 gcloud functions deploy forseti-viz-csv-1 \
   --runtime go111 \
