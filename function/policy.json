@@ -1,0 +1,10 @@
+{
+    "bindings": [
+      {
+        "role": "roles/cloudfunctions.invoker",
+        "members": [
+            "group:XXX"
+        ]
+      }
+    ]
+  }
